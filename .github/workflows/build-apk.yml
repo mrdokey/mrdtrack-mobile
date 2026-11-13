@@ -55,6 +55,7 @@ jobs:
         run: |
           pip install --quiet pillow
           flutter create --platforms=android --org id.mrdtrack --project-name mrdtrack_mobile .
+          rm -f test/widget_test.dart
 
           if [ -n "$KEYSTORE_B64" ]; then
             echo "$KEYSTORE_B64" | base64 -d > android/app/mrdtrack-release-key.jks
