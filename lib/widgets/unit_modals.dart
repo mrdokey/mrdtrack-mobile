@@ -366,13 +366,35 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
   int _tokenBalance = 0;
   Map<String, dynamic>? _info;
   Map<String, dynamic>? _invoice;
-  String _plan = 'YEARLY';
 
   @override
   void initState() {
     super.initState();
     _load();
   }
+
+  bool get _isMonthlyOnly {
+    final attrs = widget.device['attributes'] as Map<String, dynamic>? ?? {};
+    return attrs['simType']?.toString().toLowerCase() == 'monthly';
+  }
+
+  String get _effectivePlan => (_info?['isDirectPusat'] == true && _isMonthlyOnly) ? 'MONTHLY' : 'YEARLY';
+
+  int get _yearlyFee {
+    final attrs = widget.device['attributes'] as Map<String, dynamic>? ?? {};
+    final custom = int.tryParse('${attrs['subscriptionFee'] ?? 0}') ?? 0;
+    if (custom > 0) return custom;
+    return (_info?['yearlyFee'] as num?)?.toInt() ?? (_info?['fee'] as num?)?.toInt() ?? 350000;
+  }
+
+  int get _monthlyFee {
+    final attrs = widget.device['attributes'] as Map<String, dynamic>? ?? {};
+    final custom = int.tryParse('${attrs['monthlyFee'] ?? 0}') ?? 0;
+    if (custom > 0) return custom;
+    return (_info?['monthlyFee'] as num?)?.toInt() ?? 40000;
+  }
+
+  int get _fee => _effectivePlan == 'MONTHLY' ? _monthlyFee : _yearlyFee;
 
   Future<void> _load() async {
     final devId = (widget.device['id'] as num).toInt();
@@ -389,22 +411,6 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
       });
     }
   }
-
-  int get _yearlyFee {
-    final attrs = widget.device['attributes'] as Map<String, dynamic>? ?? {};
-    final custom = int.tryParse('${attrs['subscriptionFee'] ?? 0}') ?? 0;
-    if (custom > 0) return custom;
-    return (_info?['yearlyFee'] as num?)?.toInt() ?? (_info?['fee'] as num?)?.toInt() ?? 350000;
-  }
-
-  int get _monthlyFee {
-    final attrs = widget.device['attributes'] as Map<String, dynamic>? ?? {};
-    final custom = int.tryParse('${attrs['monthlyFee'] ?? 0}') ?? 0;
-    if (custom > 0) return custom;
-    return (_info?['monthlyFee'] as num?)?.toInt() ?? 40000;
-  }
-
-  int get _fee => (_info?['isDirectPusat'] == true && _plan == 'MONTHLY') ? _monthlyFee : _yearlyFee;
 
   Future<void> _useToken() async {
     setState(() => _tokenBusy = true);
@@ -430,7 +436,7 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
       (widget.device['id'] as num).toInt(),
       '${widget.device['name'] ?? ''}',
       _fee,
-      plan: _plan,
+      plan: _effectivePlan,
     );
     if (mounted) {
       setState(() {
@@ -479,13 +485,13 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
                   Text('${widget.device['name']}', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.blueAccent)),
                   Text('IMEI: ${widget.device['uniqueId']}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                   Text(
-                    'Tarif: ${AppFmt.rupiah(_fee)} / ${(isPusat && _plan == 'MONTHLY') ? 'Bulan' : 'Tahun'}',
+                    'Tarif: ${AppFmt.rupiah(_fee)} / ${_effectivePlan == 'MONTHLY' ? 'Bulan (30 Hari)' : 'Tahun (360 Hari)'}',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: text),
                   ),
                 ],
               ),
             ),
-            if (_tokenBalance > 0 && _invoice == null) ...[
+            if (!_isMonthlyOnly && _tokenBalance > 0 && _invoice == null) ...[
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(12),
@@ -558,30 +564,22 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
               ),
             ] else ...[
               if (_invoice == null) ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: ChoiceChip(
-                        label: Text('Bulanan (${AppFmt.rupiah(_monthlyFee)})', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
-                        selected: _plan == 'MONTHLY',
-                        onSelected: (_) => setState(() => _plan = 'MONTHLY'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ChoiceChip(
-                        label: Text('Tahunan (${AppFmt.rupiah(_yearlyFee)})', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
-                        selected: _plan == 'YEARLY',
-                        onSelected: (_) => setState(() => _plan = 'YEARLY'),
-                      ),
-                    ),
-                  ],
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(14)),
+                  child: Text(
+                    _isMonthlyOnly
+                        ? 'Unit ini terdaftar pada Program Langganan Bulanan (30 Hari).'
+                        : 'Unit ini terdaftar pada Program Langganan Tahunan (360 Hari).',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.blueAccent),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 ElevatedButton(
                   onPressed: _createInvoice,
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
-                  child: Text('Buat Tagihan ${_plan == 'MONTHLY' ? 'Bulanan' : 'Tahunan'} OCBC', style: const TextStyle(fontWeight: FontWeight.w900)),
+                  child: Text('Buat Tagihan ${_effectivePlan == 'MONTHLY' ? 'Bulanan' : 'Tahunan'} OCBC', style: const TextStyle(fontWeight: FontWeight.w900)),
                 ),
               ] else
                 Column(
@@ -630,7 +628,7 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
                   ],
                 ),
             ],
-            if (_tokenBalance == 0)
+            if (!_isMonthlyOnly && _tokenBalance == 0)
               TextButton(
                 onPressed: () {
                   Navigator.pop(context);
