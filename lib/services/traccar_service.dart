@@ -206,11 +206,11 @@ class TraccarService {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> createRenewalInvoice(int deviceId, String deviceName, int fee, {String planType = 'YEARLY'}) async {
+  Future<Map<String, dynamic>> createRenewalInvoice(int deviceId, String deviceName, int fee, {String plan = 'YEARLY'}) async {
     final res = await http.post(
       Uri.parse('${BrandConfig.baseUrl}/api/custom/device/create-renewal-invoice'),
       headers: {..._headers, 'Content-Type': 'application/json'},
-      body: jsonEncode({'deviceId': deviceId, 'deviceName': deviceName, 'fee': fee, 'planType': planType}),
+      body: jsonEncode({'deviceId': deviceId, 'deviceName': deviceName, 'fee': fee, 'plan': plan}),
     );
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
