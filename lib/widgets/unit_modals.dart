@@ -366,6 +366,7 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
   int _tokenBalance = 0;
   Map<String, dynamic>? _info;
   Map<String, dynamic>? _invoice;
+  String _plan = 'YEARLY';
   String _planType = 'YEARLY';
 
   @override
@@ -451,8 +452,13 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
     final box = widget.isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
     final text = widget.isDark ? Colors.white : const Color(0xFF0F172A);
     final isPusat = _info?['isDirectPusat'] == true;
-    final bank = _info?['bank'] as Map<String, dynamic>?;
-    final rawPhone = '${_info?['contactPhone'] ?? '62895428400665'}'.replaceAll(RegExp(r'\D'), '');
+    final dist = _info?['distributor'] as Map<String, dynamic>?;
+    final distName = '${dist?['name'] ?? _info?['distributorName'] ?? 'Distributor Resmi'}';
+    final distBankName = dist?['bankName']?.toString();
+    final distBankAcc = dist?['bankAccount']?.toString();
+    final distBankHolder = dist?['bankHolder']?.toString() ?? distName;
+    final hasDistBank = distBankAcc != null && distBankAcc.isNotEmpty;
+    final rawPhone = '${dist?['phone'] ?? _info?['contactPhone'] ?? '62895428400665'}'.replaceAll(RegExp(r'\D'), '');
     final waPhone = rawPhone.startsWith('0') ? '62${rawPhone.substring(1)}' : rawPhone;
 
     return Container(
@@ -512,9 +518,9 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
             if (_loading)
               const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator()))
             else if (!isPusat && _info != null) ...[
-              Text('Dikelola oleh: ${_info!['distributorName'] ?? 'Distributor Resmi'}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: text)),
+              Text('Dikelola oleh: $distName', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: text)),
               const SizedBox(height: 8),
-              if (bank != null)
+              if (hasDistBank)
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(color: box, borderRadius: BorderRadius.circular(16)),
@@ -524,13 +530,13 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('${bank['name']}', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.blueAccent)),
-                          Text('${bank['account']}', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: text)),
-                          Text('a.n ${bank['holder']}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                          Text(distBankName ?? 'Transfer Bank', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.blueAccent)),
+                          Text(distBankAcc, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: text)),
+                          Text('a.n $distBankHolder', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                         ],
                       ),
                       ElevatedButton(
-                        onPressed: () => _copy('${bank['account']}', 'Nomor Rekening'),
+                        onPressed: () => _copy(distBankAcc, 'Nomor Rekening'),
                         child: const Text('Salin'),
                       ),
                     ],
@@ -541,7 +547,7 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
               const SizedBox(height: 10),
               ElevatedButton.icon(
                 onPressed: () {
-                  final msg = Uri.encodeComponent('Halo Admin ${_info!['distributorName'] ?? ''}, saya ingin perpanjang GPS ${widget.device['name']} (${widget.device['uniqueId']}) sebesar ${AppFmt.rupiah(_fee)}.');
+                  final msg = Uri.encodeComponent('Halo Admin $distName, saya ingin perpanjang GPS ${widget.device['name']} (${widget.device['uniqueId']}) sebesar ${AppFmt.rupiah(_fee)}.');
                   launchUrl(Uri.parse('https://wa.me/$waPhone?text=$msg'), mode: LaunchMode.externalApplication);
                 },
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF16A34A), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
