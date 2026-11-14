@@ -366,6 +366,7 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
   int _tokenBalance = 0;
   Map<String, dynamic>? _info;
   Map<String, dynamic>? _invoice;
+  String _planType = 'YEARLY';
 
   @override
   void initState() {
@@ -389,12 +390,21 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
     }
   }
 
-  int get _fee {
+  int get _yearlyFee {
     final attrs = widget.device['attributes'] as Map<String, dynamic>? ?? {};
     final custom = int.tryParse('${attrs['subscriptionFee'] ?? 0}') ?? 0;
     if (custom > 0) return custom;
-    return (_info?['fee'] as num?)?.toInt() ?? 400000;
+    return (_info?['yearlyFee'] as num?)?.toInt() ?? (_info?['fee'] as num?)?.toInt() ?? 350000;
   }
+
+  int get _monthlyFee {
+    final attrs = widget.device['attributes'] as Map<String, dynamic>? ?? {};
+    final custom = int.tryParse('${attrs['monthlyFee'] ?? 0}') ?? 0;
+    if (custom > 0) return custom;
+    return (_info?['monthlyFee'] as num?)?.toInt() ?? 40000;
+  }
+
+  int get _fee => (_info?['isDirectPusat'] == true && _planType == 'MONTHLY') ? _monthlyFee : _yearlyFee;
 
   Future<void> _useToken() async {
     setState(() => _tokenBusy = true);
@@ -420,6 +430,7 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
       (widget.device['id'] as num).toInt(),
       '${widget.device['name'] ?? ''}',
       _fee,
+      planType: _planType,
     );
     if (mounted) {
       setState(() {
@@ -462,7 +473,7 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
                 children: [
                   Text('${widget.device['name']}', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.blueAccent)),
                   Text('IMEI: ${widget.device['uniqueId']}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                  Text('Tarif: ${AppFmt.rupiah(_fee)} / Tahun', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: text)),
+                  Text('Tarif: ${AppFmt.rupiah(_fee)} / ${(_info?['isDirectPusat'] == true && _planType == 'MONTHLY') ? 'Bulan' : 'Tahun'}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: text)),
                 ],
               ),
             ),
@@ -538,12 +549,33 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
                 label: const Text('Hubungi WhatsApp Distributor', style: TextStyle(fontWeight: FontWeight.w900)),
               ),
             ] else ...[
-              if (_invoice == null)
+              if (_invoice == null) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: ChoiceChip(
+                        label: Text('Bulanan (${AppFmt.rupiah(_monthlyFee)})', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+                        selected: _planType == 'MONTHLY',
+                        onSelected: (_) => setState(() => _planType = 'MONTHLY'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ChoiceChip(
+                        label: Text('Tahunan (${AppFmt.rupiah(_yearlyFee)})', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+                        selected: _planType == 'YEARLY',
+                        onSelected: (_) => setState(() => _planType = 'YEARLY'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
                 ElevatedButton(
                   onPressed: _createInvoice,
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
-                  child: const Text('Buat Tagihan Transfer OCBC (Otomatis)', style: TextStyle(fontWeight: FontWeight.w900)),
-                )
+                  child: Text('Buat Tagihan ${_planType == 'MONTHLY' ? 'Bulanan' : 'Tahunan'} OCBC', style: const TextStyle(fontWeight: FontWeight.w900)),
+                ),
+              ]
               else
                 Column(
                   children: [

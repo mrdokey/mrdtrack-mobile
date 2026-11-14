@@ -142,6 +142,19 @@ class TraccarService {
     return {};
   }
 
+  Future<String> shareDevice(int deviceId, DateTime expiration) async {
+    final res = await http.post(
+      Uri.parse('${BrandConfig.baseUrl}/api/devices/share'),
+      headers: {..._headers, 'Content-Type': 'application/x-www-form-urlencoded'},
+      body: {'deviceId': '$deviceId', 'expiration': expiration.toUtc().toIso8601String()},
+    );
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      final token = res.body.trim();
+      return 'https://gps.mrdsolution.my.id?token=$token';
+    }
+    throw Exception(res.body.isNotEmpty ? res.body : 'Gagal membuat link share');
+  }
+
   Future<void> sendCommand(int deviceId, String type) async {
     final res = await http.post(
       Uri.parse('${BrandConfig.baseUrl}/api/commands/send'),
@@ -193,11 +206,11 @@ class TraccarService {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> createRenewalInvoice(int deviceId, String deviceName, int fee) async {
+  Future<Map<String, dynamic>> createRenewalInvoice(int deviceId, String deviceName, int fee, {String planType = 'YEARLY'}) async {
     final res = await http.post(
       Uri.parse('${BrandConfig.baseUrl}/api/custom/device/create-renewal-invoice'),
       headers: {..._headers, 'Content-Type': 'application/json'},
-      body: jsonEncode({'deviceId': deviceId, 'deviceName': deviceName, 'fee': fee}),
+      body: jsonEncode({'deviceId': deviceId, 'deviceName': deviceName, 'fee': fee, 'planType': planType}),
     );
     return jsonDecode(res.body) as Map<String, dynamic>;
   }

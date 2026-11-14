@@ -51,6 +51,9 @@ class _MapScreenState extends State<MapScreen> {
   double _zoom = 12;
 
   Map<String, dynamic>? _playbackDev;
+  String _pbRange = 'today';
+  DateTimeRange? _customRange;
+  int _pbSpeed = 1; // 1, 2, 4, 8
   List<Map<String, dynamic>> _route = [];
   int _pbIdx = 0;
   bool _playing = false;
@@ -97,23 +100,32 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  Future<void> _startPlayback(Map<String, dynamic> dev, String range) async {
+  Future<void> _startPlayback(Map<String, dynamic> dev, String range, {DateTimeRange? custom}) async {
     _pbTimer?.cancel();
     setState(() {
       _playbackDev = dev;
+      _pbRange = range;
+      if (custom != null) _customRange = custom;
       _loadingPb = true;
       _playing = false;
       _pbIdx = 0;
     });
     widget.onSelectDevice(null);
+
     final now = DateTime.now();
     DateTime from = DateTime(now.year, now.month, now.day);
     DateTime to = now;
-    if (range == '6h') from = now.subtract(const Duration(hours: 6));
-    if (range == 'yesterday') {
+    if (range == '6h') {
+      from = now.subtract(const Duration(hours: 6));
+    } else if (range == 'yesterday') {
       from = from.subtract(const Duration(days: 1));
-      to = from.add(const Duration(hours: 23, minutes: 59));
+      to = from.add(const Duration(hours: 23, minutes: 59, seconds: 59));
+    } else if (range == 'custom' && (custom ?? _customRange) != null) {
+      final r = custom ?? _customRange!;
+      from = DateTime(r.start.year, r.start.month, r.start.day, 0, 0, 0);
+      to = DateTime(r.end.year, r.end.month, r.end.day, 23, 59, 59);
     }
+
     final pts = await TraccarService.instance.getRoute((dev['id'] as num).toInt(), from, to);
     if (!mounted) return;
     setState(() {
@@ -126,6 +138,37 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  Future<void> _pickCustomDateRange() async {
+    if (_playbackDev == null) return;
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: now.subtract(const Duration(days: 90)),
+      lastDate: now,
+      initialDateRange: _customRange ?? DateTimeRange(start: now.subtract(const Duration(days: 1)), end: now),
+    );
+    if (picked != null) {
+      _startPlayback(_playbackDev!, 'custom', custom: picked);
+    }
+  }
+
+  void _startTimer() {
+    _pbTimer?.cancel();
+    final ms = (400 / _pbSpeed).round().clamp(40, 400);
+    _pbTimer = Timer.periodic(Duration(milliseconds: ms), (_) {
+      if (_pbIdx >= _route.length - 1) {
+        _pbTimer?.cancel();
+        if (mounted) setState(() => _playing = false);
+      } else if (mounted) {
+        setState(() => _pbIdx++);
+        final pt = _route[_pbIdx];
+        if (pt['latitude'] != null && pt['longitude'] != null) {
+          _mapCtrl.move(LatLng((pt['latitude'] as num).toDouble(), (pt['longitude'] as num).toDouble()), _zoom);
+        }
+      }
+    });
+  }
+
   void _togglePlay() {
     if (_playing) {
       _pbTimer?.cancel();
@@ -133,14 +176,13 @@ class _MapScreenState extends State<MapScreen> {
       return;
     }
     setState(() => _playing = true);
-    _pbTimer = Timer.periodic(const Duration(milliseconds: 350), (_) {
-      if (_pbIdx >= _route.length - 1) {
-        _pbTimer?.cancel();
-        if (mounted) setState(() => _playing = false);
-      } else if (mounted) {
-        setState(() => _pbIdx++);
-      }
-    });
+    _startTimer();
+  }
+
+  void _cycleSpeed() {
+    final next = _pbSpeed == 1 ? 2 : (_pbSpeed == 2 ? 4 : (_pbSpeed == 4 ? 8 : 1));
+    setState(() => _pbSpeed = next);
+    if (_playing) _startTimer();
   }
 
   String get _tileUrl {
@@ -163,6 +205,8 @@ class _MapScreenState extends State<MapScreen> {
       if (widget.filter == 'moving') return moving;
       if (widget.filter == 'parked') return online && !moving;
       if (widget.filter == 'offline') return !online;
+      if (widget.filter == 'sleep') return AppFmt.isGpsSleep(dev, pos);
+      if (widget.filter == 'always_on') return AppFmt.isGpsAlwaysOn(dev, pos);
       return true;
     }).toList();
 
@@ -322,25 +366,57 @@ class _MapScreenState extends State<MapScreen> {
             bottom: 12,
             child: Container(
               padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: widget.isDark ? const Color(0xFF0F172A) : Colors.white, borderRadius: BorderRadius.circular(24)),
+              decoration: BoxDecoration(
+                color: widget.isDark ? const Color(0xFF0F172A) : Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.35), blurRadius: 16)],
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Playback: ${_playbackDev!['name']}', style: TextStyle(fontWeight: FontWeight.w900, color: widget.isDark ? Colors.white : Colors.black)),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Playback: ${_playbackDev!['name']}', style: TextStyle(fontWeight: FontWeight.w900, color: widget.isDark ? Colors.white : Colors.black)),
+                          Text('${_route.length} titik perjalanan', style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w700)),
+                        ],
+                      ),
                       IconButton(onPressed: () { _pbTimer?.cancel(); setState(() { _playbackDev = null; _route = []; }); }, icon: const Icon(Icons.close)),
                     ],
                   ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      _PbRangeChip('6 Jam', _pbRange == '6h', () => _startPlayback(_playbackDev!, '6h')),
+                      const SizedBox(width: 6),
+                      _PbRangeChip('Hari Ini', _pbRange == 'today', () => _startPlayback(_playbackDev!, 'today')),
+                      const SizedBox(width: 6),
+                      _PbRangeChip('Kemarin', _pbRange == 'yesterday', () => _startPlayback(_playbackDev!, 'yesterday')),
+                      const SizedBox(width: 6),
+                      _PbRangeChip('Tgl Custom', _pbRange == 'custom', _pickCustomDateRange),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
                   if (_loadingPb)
                     const LinearProgressIndicator()
                   else if (_route.isEmpty)
-                    const Text('Tidak ada data rute hari ini', style: TextStyle(color: Colors.grey))
-                  else
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text('Tidak ada data rute di rentang waktu ini', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    )
+                  else ...[
                     Row(
                       children: [
                         IconButton.filled(onPressed: _togglePlay, icon: Icon(_playing ? Icons.pause : Icons.play_arrow)),
+                        const SizedBox(width: 4),
+                        OutlinedButton(
+                          onPressed: _cycleSpeed,
+                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), minimumSize: Size.zero),
+                          child: Text('${_pbSpeed}x', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                        ),
                         Expanded(
                           child: Slider(
                             value: _pbIdx.toDouble(),
@@ -349,14 +425,47 @@ class _MapScreenState extends State<MapScreen> {
                             onChanged: (v) => setState(() => _pbIdx = v.round()),
                           ),
                         ),
-                        Text('${AppFmt.speedKmh(_route[_pbIdx])} km/h', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.green)),
                       ],
                     ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(AppFmt.dateTime(_route[_pbIdx]['fixTime']?.toString()), style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w700)),
+                        Text('${AppFmt.speedKmh(_route[_pbIdx])} km/h', style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF10B981), fontSize: 12)),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
       ],
+    );
+  }
+}
+
+class _PbRangeChip extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  const _PbRangeChip(this.label, this.active, this.onTap);
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active ? const Color(0xFF2563EB) : Colors.grey.withOpacity(0.16),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(label, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: active ? Colors.white : Colors.grey)),
+        ),
+      ),
     );
   }
 }

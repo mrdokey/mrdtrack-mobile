@@ -55,6 +55,55 @@ class _VehicleCockpitSheetState extends State<VehicleCockpitSheet> {
     _address = widget.position?['address']?.toString();
   }
 
+  Future<void> _openShareTokenDialog() async {
+    final hours = await showModalBottomSheet<int>(
+      context: context,
+      builder: (c) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(14),
+              child: Text('Bagikan Live Tracking (Token)', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+            ),
+            ListTile(leading: const Icon(Icons.timer), title: const Text('Berlaku 1 Jam'), onTap: () => Navigator.pop(c, 1)),
+            ListTile(leading: const Icon(Icons.today), title: const Text('Berlaku 24 Jam'), onTap: () => Navigator.pop(c, 24)),
+            ListTile(leading: const Icon(Icons.date_range), title: const Text('Berlaku 7 Hari'), onTap: () => Navigator.pop(c, 24 * 7)),
+            ListTile(leading: const Icon(Icons.calendar_month), title: const Text('Berlaku 30 Hari'), onTap: () => Navigator.pop(c, 24 * 30)),
+          ],
+        ),
+      ),
+    );
+    if (hours == null || !mounted) return;
+    try {
+      final exp = DateTime.now().add(Duration(hours: hours));
+      final url = await TraccarService.instance.shareDevice((widget.device['id'] as num).toInt(), exp);
+      await Clipboard.setData(ClipboardData(text: url));
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (dCtx) => AlertDialog(
+          title: const Text('Link Share Token Siap'),
+          content: SelectableText(url, style: const TextStyle(fontSize: 12)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dCtx), child: const Text('Tutup')),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(dCtx);
+                final txt = Uri.encodeComponent('Pantau lokasi unit *${widget.device['name']}* secara live di sini: $url');
+                launchUrl(Uri.parse('https://wa.me/?text=$txt'), mode: LaunchMode.externalApplication);
+              },
+              icon: const Icon(Icons.chat, size: 16),
+              label: const Text('Kirim WA'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal buat token share: $e')));
+    }
+  }
+
   Future<void> _fetchAddress() async {
     final lat = widget.position?['latitude'];
     final lng = widget.position?['longitude'];
@@ -267,14 +316,7 @@ class _VehicleCockpitSheetState extends State<VehicleCockpitSheet> {
                   launchUrl(Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$lat,$lng'), mode: LaunchMode.externalApplication);
                 }
               }),
-              _ActionBtn(Icons.share_rounded, 'Bagikan', muted, () async {
-                final lat = widget.position?['latitude'];
-                final lng = widget.position?['longitude'];
-                if (lat != null && lng != null) {
-                  await Clipboard.setData(ClipboardData(text: 'https://www.google.com/maps?q=$lat,$lng'));
-                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link Google Maps disalin!')));
-                }
-              }),
+              _ActionBtn(Icons.share_rounded, 'Bagikan', muted, _openShareTokenDialog),
             ],
           ),
         ],

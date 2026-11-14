@@ -37,6 +37,8 @@ class UnitsScreen extends StatelessWidget {
       if (filter == 'moving' && !moving) return false;
       if (filter == 'parked' && !(online && !moving)) return false;
       if (filter == 'offline' && online) return false;
+      if (filter == 'sleep' && !AppFmt.isGpsSleep(dev, pos)) return false;
+      if (filter == 'always_on' && !AppFmt.isGpsAlwaysOn(dev, pos)) return false;
       if (search.isNotEmpty) {
         final q = search.toLowerCase();
         final attrs = dev['attributes'] as Map<String, dynamic>? ?? {};
@@ -81,6 +83,10 @@ class UnitsScreen extends StatelessWidget {
                   _FilterChipBtn('Parkir', 'parked', filter, onFilterChange, isDark),
                   const SizedBox(width: 8),
                   _FilterChipBtn('Offline', 'offline', filter, onFilterChange, isDark),
+                  const SizedBox(width: 8),
+                  _FilterChipBtn('💤 Sleep', 'sleep', filter, onFilterChange, isDark),
+                  const SizedBox(width: 8),
+                  _FilterChipBtn('⚡ Always-On (Boros Aki)', 'always_on', filter, onFilterChange, isDark),
                 ],
               ),
             ),
@@ -95,6 +101,10 @@ class UnitsScreen extends StatelessWidget {
                   final pos = positions[(dev['id'] as num?)?.toInt() ?? 0];
                   final online = AppFmt.isOnline(dev);
                   final moving = AppFmt.isMoving(dev, pos);
+                  final isSleep = AppFmt.isGpsSleep(dev, pos);
+                  final isAlwaysOn = AppFmt.isGpsAlwaysOn(dev, pos);
+                  final volt = AppFmt.powerVolt(pos);
+                  final mins = AppFmt.minutesSinceFix(dev, pos);
                   final attrs = dev['attributes'] as Map<String, dynamic>? ?? {};
                   final photo = attrs['unitPhoto']?.toString() ?? '';
                   final stColor = moving ? const Color(0xFF10B981) : (online ? const Color(0xFFF59E0B) : const Color(0xFF64748B));
@@ -115,8 +125,21 @@ class UnitsScreen extends StatelessWidget {
                               children: [
                                 Text('${dev['name'] ?? ''}', style: TextStyle(color: text, fontWeight: FontWeight.w900, fontSize: 14)),
                                 Text('${attrs['vehicleModel'] ?? dev['model'] ?? 'Armada'} • ${dev['uniqueId'] ?? ''}', overflow: TextOverflow.ellipsis, style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w600)),
-                                if (attrs['renterName'] != null)
-                                  Text('Penyewa: ${attrs['renterName']}', overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.blueAccent, fontSize: 11, fontWeight: FontWeight.w700)),
+                                const SizedBox(height: 3),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  children: [
+                                    if (isAlwaysOn)
+                                      const _MiniTag('⚡ Always-On', Colors.redAccent)
+                                    else if (isSleep)
+                                      _MiniTag('💤 Sleep (${mins}m)', Colors.blueAccent),
+                                    if (volt != null && volt > 1.0)
+                                      _MiniTag('🔋 ${volt.toStringAsFixed(1)}V', volt < 12.0 ? Colors.redAccent : Colors.teal),
+                                    if (attrs['renterName'] != null)
+                                      _MiniTag('👤 ${attrs['renterName']}', Colors.indigoAccent),
+                                  ],
+                                ),
                               ],
                             ),
                           ),
@@ -136,6 +159,21 @@ class UnitsScreen extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _MiniTag extends StatelessWidget {
+  final String text;
+  final Color color;
+  const _MiniTag(this.text, this.color);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(color: color.withOpacity(0.14), borderRadius: BorderRadius.circular(6)),
+      child: Text(text, style: TextStyle(color: color, fontSize: 9.5, fontWeight: FontWeight.w800)),
     );
   }
 }

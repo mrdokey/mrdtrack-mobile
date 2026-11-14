@@ -43,6 +43,37 @@ class AppFmt {
     return spd > 1.08;
   }
 
+  static int minutesSinceFix(Map<String, dynamic> dev, Map<String, dynamic>? pos) {
+    final raw = pos?['fixTime']?.toString() ?? dev['lastUpdate']?.toString();
+    final dt = raw != null ? DateTime.tryParse(raw) : null;
+    if (dt == null) return 99999;
+    return DateTime.now().difference(dt.toUtc()).inMinutes.abs();
+  }
+
+  static double? powerVolt(Map<String, dynamic>? pos) {
+    final attrs = pos?['attributes'] as Map<String, dynamic>? ?? {};
+    return (attrs['power'] as num?)?.toDouble();
+  }
+
+  // GPS Sleep: diam & tidak kirim sinyal > 10 menit (tapi masih aktif < 24 jam)
+  static bool isGpsSleep(Map<String, dynamic> dev, Map<String, dynamic>? pos) {
+    if (isMoving(dev, pos)) return false;
+    final mins = minutesSinceFix(dev, pos);
+    return (!isOnline(dev) && mins <= 1440) || (isOnline(dev) && mins > 10);
+  }
+
+  // GPS Always-On / Nyedot Aki: tetap online aktif <= 5 mnt saat parkir, atau ACC ON saat parkir, atau voltase < 12V
+  static bool isGpsAlwaysOn(Map<String, dynamic> dev, Map<String, dynamic>? pos) {
+    if (isMoving(dev, pos)) return false;
+    final online = isOnline(dev);
+    final mins = minutesSinceFix(dev, pos);
+    final attrs = pos?['attributes'] as Map<String, dynamic>? ?? {};
+    final accOn = attrs['ignition'] == true;
+    final volt = powerVolt(pos);
+    final lowVolt = volt != null && volt > 1.0 && volt < 12.0;
+    return (online && mins <= 5) || (online && accOn) || lowVolt;
+  }
+
   static int odometerKm(Map<String, dynamic>? pos) {
     final attrs = pos?['attributes'] as Map<String, dynamic>? ?? {};
     final totalDist = (attrs['totalDistance'] as num?)?.toDouble() ?? 0.0;
