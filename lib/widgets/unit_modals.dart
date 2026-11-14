@@ -367,7 +367,6 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
   Map<String, dynamic>? _info;
   Map<String, dynamic>? _invoice;
   String _plan = 'YEARLY';
-  String _planType = 'YEARLY';
 
   @override
   void initState() {
@@ -405,7 +404,7 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
     return (_info?['monthlyFee'] as num?)?.toInt() ?? 40000;
   }
 
-  int get _fee => (_info?['isDirectPusat'] == true && _planType == 'MONTHLY') ? _monthlyFee : _yearlyFee;
+  int get _fee => (_info?['isDirectPusat'] == true && _plan == 'MONTHLY') ? _monthlyFee : _yearlyFee;
 
   Future<void> _useToken() async {
     setState(() => _tokenBusy = true);
@@ -431,7 +430,7 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
       (widget.device['id'] as num).toInt(),
       '${widget.device['name'] ?? ''}',
       _fee,
-      planType: _planType,
+      plan: _plan,
     );
     if (mounted) {
       setState(() {
@@ -469,7 +468,7 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Perpanjang Layanan (+1 Tahun)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: text)),
+            Text('Perpanjang Layanan GPS', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: text)),
             const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.all(12),
@@ -479,7 +478,10 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
                 children: [
                   Text('${widget.device['name']}', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.blueAccent)),
                   Text('IMEI: ${widget.device['uniqueId']}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                  Text('Tarif: ${AppFmt.rupiah(_fee)} / ${(_info?['isDirectPusat'] == true && _planType == 'MONTHLY') ? 'Bulan' : 'Tahun'}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: text)),
+                  Text(
+                    'Tarif: ${AppFmt.rupiah(_fee)} / ${(isPusat && _plan == 'MONTHLY') ? 'Bulan' : 'Tahun'}',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: text),
+                  ),
                 ],
               ),
             ),
@@ -507,7 +509,7 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
                       child: ElevatedButton(
                         onPressed: _tokenBusy ? null : _useToken,
                         style: ElevatedButton.styleFrom(backgroundColor: _emerald, foregroundColor: Colors.white),
-                        child: Text(_tokenBusy ? 'Memproses...' : 'Potong 1 Token & Aktifkan'),
+                        child: Text(_tokenBusy ? 'Memproses...' : 'Potong 1 Token & Aktifkan (+1 Tahun)'),
                       ),
                     ),
                   ],
@@ -561,16 +563,16 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
                     Expanded(
                       child: ChoiceChip(
                         label: Text('Bulanan (${AppFmt.rupiah(_monthlyFee)})', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
-                        selected: _planType == 'MONTHLY',
-                        onSelected: (_) => setState(() => _planType = 'MONTHLY'),
+                        selected: _plan == 'MONTHLY',
+                        onSelected: (_) => setState(() => _plan = 'MONTHLY'),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: ChoiceChip(
                         label: Text('Tahunan (${AppFmt.rupiah(_yearlyFee)})', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
-                        selected: _planType == 'YEARLY',
-                        onSelected: (_) => setState(() => _planType = 'YEARLY'),
+                        selected: _plan == 'YEARLY',
+                        onSelected: (_) => setState(() => _plan = 'YEARLY'),
                       ),
                     ),
                   ],
@@ -579,10 +581,9 @@ class _RenewalModalSheetState extends State<RenewalModalSheet> {
                 ElevatedButton(
                   onPressed: _createInvoice,
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
-                  child: Text('Buat Tagihan ${_planType == 'MONTHLY' ? 'Bulanan' : 'Tahunan'} OCBC', style: const TextStyle(fontWeight: FontWeight.w900)),
+                  child: Text('Buat Tagihan ${_plan == 'MONTHLY' ? 'Bulanan' : 'Tahunan'} OCBC', style: const TextStyle(fontWeight: FontWeight.w900)),
                 ),
-              ]
-              else
+              ] else
                 Column(
                   children: [
                     Container(
